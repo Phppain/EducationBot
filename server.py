@@ -1,49 +1,54 @@
 #server.py
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+import shutil
 from typing import Dict
 from web3 import Web3
 import sqlite3
 import os
 from telegram import Bot, Update
-from telegram.ext import CommandHandler
+from datetime import datetime
+
 
 # Создание FastAPI приложения
 app = FastAPI()
 
 
 
-#BD
-bd = {
-    "test": {
-        "grammar": {
-            "question_number": 1,
-            "question": "first_Question",
-            "answers": {
-                "a_answer": "a",
-                "b_answer": "b",
-                "c_answer": "c",
-                "d_answer": "d"
-            }
-        }
-    },
-    "homeworks": {
-        1: {
-            "homework": "some homework 1"
-        },
-        2: {
-            "homework": "some homework 2"
-        },
-        3: {
-            "homework": "some homework 3"
-        }
+#BDfrom datetime import datetime
 
-    },
-    "achievements": {
-        "hard_achievements": {
+app = FastAPI()
 
-        }
-    }
-}
+# Подключение к базе данных SQLite
+def get_db_connection():
+    conn = sqlite3.connect('homeworks.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Маршрут для загрузки домашнего задания
+@app.post("/homeworks/post_homework/")
+async def post_homeworks(file: UploadFile = File(...), user_id: int = 1):
+    try:
+        # Чтение содержимого файла
+        file_content = await file.read()
+
+        # Подключение к базе данных
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # SQL запрос на сохранение файла в базу данных
+        cursor.execute("""
+            INSERT INTO homeworks (user_id, filename, file_content, upload_time)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, file.filename, file_content, datetime.now()))
+
+        # Сохранение изменений
+        conn.commit()
+        conn.close()
+
+        return {"status": "success", "message": f"File '{file.filename}' uploaded successfully!"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error while uploading file: {str(e)}")
 
 
 # Подключение к блокчейну через Infura
@@ -59,68 +64,75 @@ def get_db_connection():
     conn = sqlite3.connect('your_database.db')
     conn.row_factory = sqlite3.Row
     return conn
+
 # Возращаем тесты
+DATABASE_PATH = "kazakh_lang_db.py"  # Укажи путь к твоей базе данных в проекте
 @app.get("/tests/{test}")
 async def get_tests(test: str) -> Dict:
-    for bd_test in bd["test"]:
-        if bd_test == test:
-            return bd["test"][test]
-    raise HTTPException(status_code=404, detail="Test not found!")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Запрос на получение теста по имени из таблицы tests
+    cursor.execute("SELECT * FROM tests WHERE name = ?", (test,))
+    test_data = cursor.fetchone()
+    conn.close()
+
+    if test_data:
+        return dict(test_data)  # Возвращаем как словарь
+    else:
+        raise HTTPException(status_code=404, detail="Test not found!")
 
 # Возращаем домашние задания
-@app.get("/homeworks/{id}")
+@app.get("/homeworks/{homework_id}")
 async def get_homeworks(homework_id: int) -> str:
-    for i in bd["homeworks"][homework_id]:
-        if i == homework_id:
-            return bd["homeworks"][homework_id]["homework"]
-        else:
-            raise HTTPException(status_code=404, detail="Homework not Found!")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Запрос на получение домашнего задания из таблицы homeworks
+    cursor.execute("SELECT homework FROM homeworks WHERE id = ?", (homework_id,))
+    homework = cursor.fetchone()
+    conn.close()
+
+    if homework:
+        return homework["homework"]  # Возвращаем текст домашнего задания
+    else:
+        raise HTTPException(status_code=404, detail="Homework not found!")
 
 # Функционал отправки домашнего задания
-@app.post("/homeworks/post_homework/")
-async def post_homeworks():
-    pass
 
+@app.post("/homeworks/post_homework/")
+async def post_homeworks(file: UploadFile = File(...)):
+    try:
+        # Ограничиваем типы файлов, которые можно загрузить
+        allowed_extensions = ["pdf", "doc", "docx", "txt", "jpg", "png"]
+        file_extension = file.filename.split(".")[-1].lower()
+
+        if file_extension not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Unsupported file type")
+
+        # Путь для сохранения файла
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
+
+        # Сохраняем файл
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {"status": "success", "message": f"File '{file.filename}' uploaded successfully!"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error while uploading file: {str(e)}")
 # Достижения
 @app.get("/achievements/{achievement_id}")
-async def get_achievements(achievement_id):
-    pass
+async def get_achievements(achievement_id: int) -> Dict:
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-#
-# # Установка вебхука для Telegram бота
-# @app.post("/webhook/")
-# async def telegram_webhook(request: Request):
-#     data = await request.json()
-#     update = Update.de_json(data, bot)
-#     dispatcher.process_update(update)
-#     return {"message": "Webhook received"}
-#
-#
-# # Функция для обработки команды /start в боте
-# def start(update, context):
-#     user = update.message.from_user
-#     context.bot.send_message(chat_id=user.id, text="Добро пожаловать! Это Kazakh Telegram Bot с поддержкой блокчейна!")
-#
-#
-# dispatcher = Dispatcher(bot, None, workers=0)
-# dispatcher.add_handler(CommandHandler("start", start))
-#
-#
-# # Проверка подключения к блокчейну
-# @app.get("/check-connection")
-# async def check_connection():
-#     if web3.isConnected():
-#         return {"message": "Successfully connected to Ethereum network"}
-#     else:
-#         return {"message": "Failed to connect"}
-#
-#
-# # Получение баланса адреса через Telegram Mini App
-# @app.post("/balance/{address}")
-# async def get_balance(address: str, update_id: int):
-#     balance = web3.eth.get_balance(address)
-#     eth_balance = web3.fromWei(balance, 'ether')
-#
-#     # Отправка баланса пользователю через Telegram
-#     bot.send_message(chat_id=update_id, text=f"Баланс: {eth_balance} ETH")
-#     return {"address": address, "balance": eth_balance}
+    # Запрос на получение достижения из таблицы achievements
+    cursor.execute("SELECT * FROM achievements WHERE id = ?", (achievement_id,))
+    achievement = cursor.fetchone()
+    conn.close()
+
+    if achievement:
+        return dict(achievement)  # Возвращаем данные как словарь
+    else:
+        raise HTTPException(status_code=404, detail="Achievement not found!")
