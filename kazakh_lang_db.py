@@ -1,9 +1,10 @@
 import sqlite3
 
+# Создаем подключение к базе данных
 conn = sqlite3.connect('kazakh_language.db')
 cursor = conn.cursor()
 
-# Пользователи
+# Таблица пользователей
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -13,18 +14,18 @@ cursor.execute('''
     )
 ''')
 
-# Отправка дз
+# Таблица отправленных домашних заданий
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS homework_submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
+        user_id INTEGER NOT NULL,
         file_path TEXT NOT NULL,
         submission_date TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
 ''')
 
-# Достижения с названием и описанием
+# Таблица достижений
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS achievements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +34,7 @@ cursor.execute('''
     )
 ''')
 
-# Те достижения которые выполнены
+# Таблица выполненных достижений пользователя
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS user_achievements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +46,7 @@ cursor.execute('''
     )
 ''')
 
-# Коины пользователя, можно потом добавлять коины за выполненое задание
+# Таблица коинов пользователя
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS user_coins (
         user_id INTEGER PRIMARY KEY,
@@ -54,14 +55,15 @@ cursor.execute('''
     )
 ''')
 
+# Таблица тестов
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS tests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        content TEXT NOT NULL
+    )
+''')
 
-cursor.execute("SELECT * FROM users")
-rows = cursor.fetchall()
-
-for row in rows:
-    print(row)
-
+# Сохраняем изменения и закрываем соединение
 conn.commit()
 conn.close()
-
-
